@@ -1,11 +1,11 @@
 import logging
+
 from aiogram import Bot, Dispatcher, types
-from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import State, StatesGroup
+from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils import executor
-import asyncio
 
 # Replace 'YOUR_BOT_TOKEN' with your actual bot token
 BOT_TOKEN = '6029491691:AAFchAuoZT3OVTy4aSI_6ntVSnI7JxVaGWk'
@@ -23,11 +23,13 @@ dp = Dispatcher(bot, storage=storage)
 # ownerID=None
 # subjectID=None
 # questions_count=1
-answers = []
+correct_answers = []
+
 
 # Define states
 class Form(StatesGroup):
     waiting_for_custom_question_count = State()
+
 
 # Handler for the /create command
 @dp.message_handler(commands=['create'])
@@ -42,6 +44,7 @@ async def choose_subject(message: Message):
     )
     await message.reply("📚 Iltimos quyidagi fanlardan birini tanlang:", reply_markup=ikb_subjects)
 
+
 # Callback query handler for subjects
 @dp.callback_query_handler(lambda query: query.data.startswith('sub_'))
 async def choose_question_count(callback_query: types.CallbackQuery):
@@ -51,8 +54,8 @@ async def choose_question_count(callback_query: types.CallbackQuery):
         'phy': 3,
         'lit': 4,
     }[callback_query.data.split('_')[1]]
-    ownerID=callback_query.from_user.id
-    subjectID=subject_id
+    ownerID = callback_query.from_user.id
+    subjectID = subject_id
 
     user_id = callback_query.from_user.id
     # Delete the previous message
@@ -72,6 +75,7 @@ async def choose_question_count(callback_query: types.CallbackQuery):
 
     await bot.send_message(callback_query.from_user.id, "How many questions?", reply_markup=ikb_question_count)
 
+
 # Callback query handler for question count
 @dp.callback_query_handler(lambda query: query.data.startswith('count_'))
 async def ask_custom_question_count(callback_query: types.CallbackQuery, state: FSMContext):
@@ -79,15 +83,18 @@ async def ask_custom_question_count(callback_query: types.CallbackQuery, state: 
         await Form.waiting_for_custom_question_count.set()
         # Delete the previous message
         await bot.delete_message(chat_id=callback_query.message.chat.id, message_id=callback_query.message.message_id)
-        await bot.send_message(callback_query.from_user.id, "Iltimos test savollari sonini o'zingiz kiriting. Test savollar miqdori 100 tadan oshmasligi kerak:")
+        await bot.send_message(callback_query.from_user.id,
+                               "Iltimos test savollari sonini o'zingiz kiriting. Test savollar miqdori 100 tadan "
+                               "oshmasligi kerak:")
     else:
         questions_amount = int(callback_query.data.split('_')[1])  # Extract question count from callback_data
         # Delete the previous message
         await bot.delete_message(chat_id=callback_query.message.chat.id, message_id=callback_query.message.message_id)
 
         user_id = callback_query.from_user.id
-        await give_answers(questions_amount, user_id)
+        await process_question_creation(callback_query.message, questions_amount, 1)
         #await bot.send_message(user_id, f"Test created with {questions_amount} questions. Would you like to save this test?")
+
 
 # Handler to receive custom question count
 @dp.message_handler(state=Form.waiting_for_custom_question_count)
@@ -99,60 +106,45 @@ async def receive_custom_question_count(message: types.Message, state: FSMContex
             return
         user_id = message.from_user.id
         await state.finish()
-        #await message.reply(f"Test created with {questions_amount} questions. Would you like to save this test?")
-        await give_answers(questions_amount,user_id)
+        # await message.reply(f"Test created with {questions_amount} questions. Would you like to save this test?")
+        await process_question_creation(message, questions_amount, 1)
     except ValueError:
         await message.reply("Iltimos, to'g'ri son kiriting.")
 
 
-async def give_answers(questions_amount, user_id):
-    options = ['A', 'B', 'C', 'D', 'E']
-    responses = {}  # Dictionary to store user responses for each question
-
-    for i in range(1, questions_amount + 1):
-        # Inline keyboard for each question
-        ikb_answers = InlineKeyboardMarkup(row_width=5)
-        buttons = [InlineKeyboardButton(text=str(option), callback_data=f'variant_{option}_{i}') for option in options]
-        ikb_answers.add(*buttons)
-
-        # Send question with answer options
-        message = await bot.send_message(user_id, f"{i}-savol uchun javobingizni tanlang:", reply_markup=ikb_answers)
-
-        # Wait for user's response
-        while True:
-            response = await dp.current_state().get_state()
-
-            if response:
-                callback_data = response.split('_')
-
-                if callback_data[0] == 'variant' and int(callback_data[2]) == i:
-                    responses[i] = callback_data[1]
-                    await bot.edit_message_text(chat_id=user_id, message_id=message.message_id,
-                                                text=f"{i}-savol uchun javobingiz: {callback_data[1]}")
-                    break
-            else:
-                await asyncio.sleep(1)  # Wait and try again if no response yet
-
-        await asyncio.sleep(1)  # Optional delay before sending the next question
-
-    # After all questions are answered, send final message
-    await bot.send_message(user_id,
-                           f"Test completed with {questions_amount} questions. Would you like to save this test?")
-
-    # Optionally, return the responses for further processing if needed
-    return responses
+async def process_question_creation(message, num_questions, current_question):
+    variants = types.InlineKeyboardMarkup(row_width=5)
+    v1 = types.InlineKeyboardButton(text='A', callback_data=f"teacheranswer_{num_questions}_{current_question}_A")
+    v2 = types.InlineKeyboardButton(text='B', callback_data=f"teacheranswer_{num_questions}_{current_question}_B")
+    v3 = types.InlineKeyboardButton(text='C', callback_data=f"teacheranswer_{num_questions}_{current_question}_C")
+    v4 = types.InlineKeyboardButton(text='D', callback_data=f"teacheranswer_{num_questions}_{current_question}_D")
+    v5 = types.InlineKeyboardButton(text='E', callback_data=f"teacheranswer_{num_questions}_{current_question}_E")
+    variants.row(v1, v2, v3, v4, v5)
+    if current_question != 1:
+        await bot.delete_message(chat_id=message.chat.id, message_id=message.message_id)
+    await bot.send_message(message.chat.id, f"👇 <b>{current_question}-savol</b> uchun javobingizni kiriting:",
+                           reply_markup=variants, parse_mode="HTML")
 
 
-# async def give_answers(questions_amount, user_id):
-#     # Inline keyboard for variants
-#     ikb_answers = InlineKeyboardMarkup(row_width=5)
-#     options = ['A', 'B', 'C', 'D', 'E']
-#     buttons = [InlineKeyboardButton(text=str(option), callback_data=f'variant_{option}') for option in options]
-#     ikb_answers.add(*buttons)
-#
-#     for i in range(1, questions_amount + 1):
-#         await bot.send_message(user_id, f"{i}-savol uchun javobingizni kiriting:",reply_markup=ikb_answers)
-#     await bot.send_message(chat_id=user_id,text=f"Test created with {questions_amount} questions. Would you like to save this test?")
+@dp.callback_query_handler(lambda query: query.data.startswith('teacheranswer_'))
+async def process_answer(call):
+    data = call.data.split('_')
+    # testID = int(data[1])
+    total_questions = int(data[1])
+    current_question = int(data[2])
+    correct_answers.append(data[3])
+
+    if current_question < total_questions:
+        await process_question_creation(call.message, total_questions, current_question + 1)
+    else:
+        validate_correct_answers_markup = types.InlineKeyboardMarkup(row_width=2)
+        btn1 = types.InlineKeyboardButton(text="❌Bekor qilish", callback_data="validate_answer:cancel")
+        btn2 = types.InlineKeyboardButton(text="✅Tasdiqlash", callback_data="validate_answer:verify")
+        validate_correct_answers_markup.row(btn1, btn2)
+        answers_str = "".join(correct_answers)
+        await bot.delete_message(chat_id=call.message.chat.id, message_id=call.message.message_id)
+        await bot.send_message(call.message.chat.id, f"""Siz kiritgan javoblar: <b>{answers_str}</b>Tasdiqlaysizmi?""",
+                               parse_mode="HTML", reply_markup=validate_correct_answers_markup)
 
 
 # Start the bot
