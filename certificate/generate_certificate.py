@@ -48,7 +48,7 @@ def generate_certificate(studentID, testID):
 
         # Save the modified image
         current_datetime = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-        new_image_path = f"images/certificate0-{current_datetime}.jpg"
+        new_image_path = f"certificate0-{current_datetime}.jpg"
         img.save(new_image_path)
         print(f"Certificate saved as: {new_image_path}")
 
