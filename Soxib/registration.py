@@ -5,7 +5,7 @@ from aiogram import Bot, Dispatcher, types, F, Router
 from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKeyboardButton
 from datetime import datetime
 from data.config import *
-from data import db
+from db import requests as db
 import logging
 
 API_TOKEN = 'YOUR_API_TOKEN'
