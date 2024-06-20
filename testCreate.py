@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 
 from aiogram import Bot, Dispatcher, types
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
@@ -6,6 +7,7 @@ from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils import executor
+from db import requests
 
 # Replace 'YOUR_BOT_TOKEN' with your actual bot token
 BOT_TOKEN = '6029491691:AAFchAuoZT3OVTy4aSI_6ntVSnI7JxVaGWk'
@@ -24,6 +26,7 @@ dp = Dispatcher(bot, storage=storage)
 # subjectID=None
 # questions_count=1
 correct_answers = []
+testData = {}
 
 
 # Define states
@@ -60,7 +63,7 @@ async def choose_question_count(callback_query: types.CallbackQuery):
     user_id = callback_query.from_user.id
     # Delete the previous message
     await bot.delete_message(chat_id=callback_query.message.chat.id, message_id=callback_query.message.message_id)
-
+    subjectID=requests.get_subject_id()
     # Inline keyboard for number of questions
     ikb_question_count = InlineKeyboardMarkup(row_width=3)
     options = [5, 10, 15, 20, 25, 30]
@@ -145,6 +148,40 @@ async def process_answer(call):
         await bot.delete_message(chat_id=call.message.chat.id, message_id=call.message.message_id)
         await bot.send_message(call.message.chat.id, f"""Siz kiritgan javoblar: <b>{answers_str}</b>Tasdiqlaysizmi?""",
                                parse_mode="HTML", reply_markup=validate_correct_answers_markup)
+
+
+@dp.callback_query_handler(lambda query: query.data.startswith('validate_answer:'))
+async def save_questions(call):
+    validate_message = call.data.split(":")[1]
+    if validate_message == "cancel":
+        correct_answers.clear()
+        await bot.delete_message(chat_id=call.message.chat.id, message_id=call.message.message_id)
+        await bot.send_message(call.from_user.id, f"❌ Testingiz bekor qilindi.", parse_mode="HTML")
+        return
+    else:
+        created_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        testID = requests.create_test_on_db(call.message.chat.id, subjectID, created_at)
+        #questionData['testID'] = int(testID)
+
+        #testID_repr = test_id_repr(testID)
+        #are_questions_created = db.create_questions(questionData['testID'], correct_answers)
+
+        #if testID and are_questions_created:
+        await bot.delete_message(chat_id=call.message.chat.id, message_id=call.message.message_id)
+        await bot.send_message(call.from_user.id,
+                               f"✅ Test va barcha savollar muvaffaqiyatli yaratildi. Testingiz IDsi: <b>{0}</b>",
+                               parse_mode="HTML")
+        correct_answers.clear()
+        # elif not testID:
+        #     bot.delete_message(chat_id=call.message.chat.id, message_id=call.message.message_id)
+        #     bot.send_message(call.from_user.id,
+        #                      "⏳ Testni yaratishda muammo yuzaga keldi. Tez orada bu muammoni to'g'rilaymiz!")
+        #     correct_answers.clear()
+        # elif not are_questions_created:
+        #     bot.delete_message(chat_id=call.message.chat.id, message_id=call.message.message_id)
+        #     bot.send_message(call.from_user.id,
+        #                      "⏳ Savollarni yaratishda muammo yuzaga keldi. Tez orada bu muammoni to'g'rilaymiz!")
+        #     correct_answers.clear()
 
 
 # Start the bot
