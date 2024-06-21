@@ -4,10 +4,10 @@ from sqlalchemy.future import select
 from aiogram import Bot, Dispatcher, types
 from aiogram.dispatcher import FSMContext
 from aiogram.types import Message
-from models import User, Subject, Test, Question, Participation, async_session, TeacherState
+from db.models import User, Subject, Test, Question, Participation, async_session, TeacherState, init_models
 
 
-# Functions
+# functions
 async def register_user(message: Message, userID, fullname, region, district, school, roleID, joined_at):
     async with async_session() as session:
         try:
@@ -119,7 +119,7 @@ async def save_participation(userID, testID, score, submitted_at):
         # Initialize bot
 
 
-API_TOKEN = 'YOUR_BOT_API_TOKEN'
+API_TOKEN = '6029491691:AAFchAuoZT3OVTy4aSI_6ntVSnI7JxVaGWk'
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher(bot)
 
@@ -140,12 +140,12 @@ async def process_subject(message: types.Message, state: FSMContext):
     # await TeacherState.next()
 
 
-# Initialize database
-import asyncio
-
-asyncio.run(init_models())
-
-if __name__ == '__main__':
-    from aiogram.utils import executor
-
-    executor.start_polling(dp, skip_updates=True)
+# # Initialize database
+# import asyncio
+#
+# asyncio.run(init_models())
+#
+# if __name__ == '__main__':
+#     from aiogram.utils import executor
+#
+#     executor.start_polling(dp, skip_updates=True)

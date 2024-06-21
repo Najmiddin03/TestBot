@@ -1,7 +1,7 @@
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy.orm import declarative_base, relationship
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
-from config import DB_HOST, DB_USER, DB_PASSWORD, DB_NAME
+from db.config import DB_HOST, DB_USER, DB_PASSWORD, DB_NAME
 from aiogram.dispatcher.filters.state import State, StatesGroup
 
 # Database setup
@@ -71,6 +71,12 @@ class Participation(Base):
 async def init_models():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+
+if __name__ == "__main__":
+    import asyncio
+
+    asyncio.run(init_models())
 
 
 # State Management

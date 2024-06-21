@@ -1,12 +1,20 @@
 import os
-from aiogram import types
+
+from aiogram import Bot, Dispatcher, types
+from aiogram.contrib.fsm_storage.memory import MemoryStorage
 
 DB_HOST = "localhost"
 DB_USER = "root"        # Your MySQL username
 DB_PASSWORD = "5656"  # Your MySQL password
 DB_NAME = "test"  # The database you created
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+# Replace 'YOUR_BOT_TOKEN' with your actual bot token
+BOT_TOKEN = '6029491691:AAFchAuoZT3OVTy4aSI_6ntVSnI7JxVaGWk'
+
+# Initialize bot and dispatcher
+bot = Bot(token=BOT_TOKEN)
+storage = MemoryStorage()
+dp = Dispatcher(bot, storage=storage)
 
 LOGS_CHANNEL = os.getenv("LOGS_CHANNEL")
 
