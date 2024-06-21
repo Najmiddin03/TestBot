@@ -194,7 +194,7 @@ def setup_teacher_handlers(dp):
         try:
             # Start the test
             own_tests_markup = types.InlineKeyboardMarkup(row_width=3)
-            all_active_tests = db.get_all_active_tests(message.chat.id)
+            all_active_tests = await db.get_all_active_tests(message.chat.id)
 
             if all_active_tests:
                 for test in all_active_tests:
@@ -218,7 +218,7 @@ def setup_teacher_handlers(dp):
         try:
             start_testID = int(call.data.split(":")[1])
             start_testID_repr = test_id_repr(start_testID)
-            is_started = db.start_test(start_testID)
+            is_started = await db.start_test(start_testID)
 
             if is_started:
                 await bot.delete_message(chat_id=call.message.chat.id, message_id=call.message.message_id)
@@ -235,7 +235,7 @@ def setup_teacher_handlers(dp):
         try:
             # Finish the test
             own_tests_markup = types.InlineKeyboardMarkup(row_width=3)
-            all_ongoing_tests = db.get_all_ongoing_tests(message.chat.id)
+            all_ongoing_tests = await db.get_all_ongoing_tests(message.chat.id)
 
             if all_ongoing_tests:
                 for test in all_ongoing_tests:
@@ -258,7 +258,7 @@ def setup_teacher_handlers(dp):
         try:
             finish_testID = int(call.data.split(":")[1])
             finish_testID_repr = test_id_repr(finish_testID)
-            is_finished = db.finish_test(finish_testID)
+            is_finished = await db.finish_test(finish_testID)
 
             if is_finished:
                 await bot.delete_message(chat_id=call.message.chat.id, message_id=call.message.message_id)

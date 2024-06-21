@@ -1,13 +1,16 @@
 from datetime import datetime
-from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.future import select
-from aiogram import Bot, Dispatcher, types
+
 from aiogram.dispatcher import FSMContext
 from aiogram.types import Message
-from db.models import User, Subject, Test, Question, Participation, async_session, TeacherState, init_models
+from sqlalchemy import update
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.future import select
+
+from db.config import *
+from db.models import User, Subject, Test, Question, Participation, async_session, TeacherState
 
 
-# functions
+# Functions
 async def register_user(message: Message, userID, fullname, region, district, school, roleID, joined_at):
     async with async_session() as session:
         try:
@@ -70,6 +73,97 @@ async def create_test_on_db(ownerID, subjectID, created_at):
             return None
 
 
+# start test function
+async def start_test(testID):
+    started_at = datetime.now()
+    async with async_session() as session:
+        try:
+            stmt = update(Test).where(Test.testID == testID, Test.ended_at.is_(None)).values(is_ongoing=True,
+                                                                                             started_at=started_at)
+            await session.execute(stmt)
+            await session.commit()
+            print(f"Test-{testID} boshlandi!")
+            return True
+        except SQLAlchemyError as e:
+            print(f"Error in start_test(): {e}")
+            return False
+
+
+async def check_if_other_test_is_ongoing(teacherID):
+    async with async_session() as session:
+        try:
+            result = await session.execute(select(Test).where(Test.ownerID == teacherID, Test.is_ongoing == True))
+            ongoing_tests_by_this_user = result.scalars().first()
+            return ongoing_tests_by_this_user
+        except SQLAlchemyError as e:
+            print(f"Error in check_if_other_test_is_ongoing(): {e}")
+            return None
+
+
+async def get_all_active_tests(teacherID):
+    async with async_session() as session:
+        try:
+            result = await session.execute(
+                select(Test).where(Test.ownerID == teacherID, Test.is_active == True, Test.is_ongoing == False))
+            active_tests_by_this_user = result.scalars().all()
+            return active_tests_by_this_user
+        except SQLAlchemyError as e:
+            print(f"Error in get_all_active_tests(): {e}")
+            return []
+
+
+# Merged function: get_all_ongoing_tests and check_if_other_test_is_ongoing
+async def get_all_ongoing_tests(teacherID):
+    async with async_session() as session:
+        try:
+            result = await session.execute(select(Test).where(Test.ownerID == teacherID, Test.is_ongoing == True))
+            ongoing_tests_by_this_user = result.scalars().all()
+            return ongoing_tests_by_this_user
+        except SQLAlchemyError as e:
+            print(f"Error in get_all_ongoing_tests(): {e}")
+            return []
+
+
+async def is_test_started(testID):
+    async with async_session() as session:
+        try:
+            result = await session.execute(select(Test.started_at).where(Test.testID == testID))
+            started_test = result.scalar_one_or_none()
+            return started_test
+        except SQLAlchemyError as e:
+            print(f"Error in is_test_started(): {e}")
+            return None
+
+
+async def is_test_ended(testID):
+    async with async_session() as session:
+        try:
+            result = await session.execute(
+                select(Test.ended_at).where(Test.testID == testID, Test.is_ongoing == False, Test.ended_at.isnot(None)))
+            ended_test = result.scalar_one_or_none()
+            return ended_test
+        except SQLAlchemyError as e:
+            print(f"Error in is_test_ended(): {e}")
+            return None
+
+
+# finish test function
+async def finish_test(testID):
+    finished_at = datetime.now()
+    async with async_session() as session:
+        try:
+            stmt = update(Test).where(Test.testID == testID, Test.ended_at.is_(None)).values(ended_at=finished_at,
+                                                                                             is_ongoing=False,
+                                                                                             is_active=False)
+            await session.execute(stmt)
+            await session.commit()
+            print(f"Test-{testID} yakunlandi!")
+            return True
+        except SQLAlchemyError as e:
+            print(f"Error in finish_test(): {e}")
+            return False
+
+
 async def create_questions(testID, answers):
     async with async_session() as session:
         try:
@@ -119,9 +213,9 @@ async def save_participation(userID, testID, score, submitted_at):
         # Initialize bot
 
 
-API_TOKEN = '6029491691:AAFchAuoZT3OVTy4aSI_6ntVSnI7JxVaGWk'
-bot = Bot(token=API_TOKEN)
-dp = Dispatcher(bot)
+# API_TOKEN = 'YOUR_BOT_API_TOKEN'
+# bot = Bot(token=API_TOKEN)
+# dp = Dispatcher(bot)
 
 
 # Example handler
@@ -139,13 +233,10 @@ async def process_subject(message: types.Message, state: FSMContext):
     # Transition to the next state if needed
     # await TeacherState.next()
 
-
 # # Initialize database
 # import asyncio
-#
 # asyncio.run(init_models())
 #
 # if __name__ == '__main__':
 #     from aiogram.utils import executor
-#
 #     executor.start_polling(dp, skip_updates=True)
