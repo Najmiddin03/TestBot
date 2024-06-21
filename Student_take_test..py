@@ -1,9 +1,11 @@
 from aiogram import Bot, Dispatcher, types
-from aiogram import LoggingMiddleware
+# from aiogram import LoggingMiddleware
 from aiogram.types import ParseMode
 from aiogram.utils import executor
 from db import requests as db
 from datetime import datetime
+from aiogram.contrib.middlewares.logging import LoggingMiddleware
+
 
 
 bot = Bot(token="7311726469:AAHD5xOq6EwAsd6ZjZ3o7g-ao67qzmoVh3I", ParseMode="HTML")
