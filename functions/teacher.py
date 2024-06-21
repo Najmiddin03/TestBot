@@ -190,7 +190,7 @@ def setup_teacher_handlers(dp):
         try:
             # Start the test
             own_tests_markup = types.InlineKeyboardMarkup(row_width=3)
-            all_active_tests = db.get_all_active_tests(1)
+            all_active_tests = db.get_all_active_tests(message.chat.id)
 
             if all_active_tests:
                 for test in all_active_tests:
