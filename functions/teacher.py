@@ -93,6 +93,10 @@ def setup_teacher_handlers(dp):
                 if questions_amount > 100:
                     await message.reply("Savollar miqdori 100 tadan oshmasligi kerak. Qayta urinib ko'ring.")
                     return
+                elif questions_amount < 0:
+                    await message.reply(
+                        "Kechirasiz, test savollari soni 0 dan kam bo'lishi mumkin emas. Testni boshidan yarating.")
+                    return
                 await state.finish()
                 await process_question_creation(message, questions_amount, 1)
             except ValueError:
