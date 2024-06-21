@@ -22,6 +22,24 @@ def setup_teacher_handlers(dp):
     @dp.message_handler(commands=['create'])
     async def choose_subject(message: Message):
         try:
+            user_id = message.from_user.id
+            is_teacher = await db.validate_teacher(user_id)
+
+            if not is_teacher:
+                await bot.delete_message(chat_id=message.chat.id, message_id=message.message_id)
+                await bot.send_message(message.chat.id,
+                                       "⛔️ Kechirasiz, siz o'qituvchi sifatida ro'yxatdan o'tmagansiz!")
+                return
+
+            is_other_test_ongoing = await db.check_if_other_test_is_ongoing(user_id)
+            if is_other_test_ongoing:
+                await bot.delete_message(chat_id=message.chat.id, message_id=message.message_id)
+                await bot.send_message(message.chat.id,
+                                       f"Kechirasiz, sizning boshqa test(lar)ingiz davom etmoqda. Test davom etayotgan "
+                                       f"paytda yangi test yarata olmaysiz!",
+                                       parse_mode="HTML")
+                return
+
             # Inline keyboard for subjects
             subject_markup = types.InlineKeyboardMarkup(row_width=2)
             subjects = await db.get_subjects()
@@ -63,7 +81,7 @@ def setup_teacher_handlers(dp):
 
     # Callback query handler for question count
     @dp.callback_query_handler(lambda query: query.data.startswith('test_count:'))
-    async def ask_question_count(callback_query: types.CallbackQuery, state: FSMContext):
+    async def ask_question_count(callback_query: types.CallbackQuery):
         try:
             if callback_query.data.split(':')[1] == 'other':
                 await Form.waiting_for_custom_question_count.set()
@@ -71,15 +89,14 @@ def setup_teacher_handlers(dp):
                 await bot.delete_message(chat_id=callback_query.message.chat.id,
                                          message_id=callback_query.message.message_id)
                 await bot.send_message(callback_query.from_user.id,
-                                       "Iltimos test savollari sonini o'zingiz kiriting. Test savollar miqdori 100 tadan "
+                                       "Iltimos test savollari sonini o'zingiz kiriting. Test savollar miqdori 100 "
+                                       "tadan"
                                        "oshmasligi kerak:")
             else:
                 questions_amount = int(callback_query.data.split(':')[1])  # Extract question count from callback_data
                 # Delete the previous message
                 await bot.delete_message(chat_id=callback_query.message.chat.id,
                                          message_id=callback_query.message.message_id)
-
-                user_id = callback_query.from_user.id
                 await process_question_creation(callback_query.message, questions_amount, 1)
         except Exception as e:
             await bot.send_message(LOGS_CHANNEL, f"Error in ask_question_count() handler: {e}")
@@ -155,11 +172,12 @@ def setup_teacher_handlers(dp):
             if validate_message == "cancel":
                 correct_answers.clear()
                 await bot.delete_message(chat_id=call.message.chat.id, message_id=call.message.message_id)
-                await bot.send_message(call.from_user.id, f"❌ Testingiz bekor qilindi.", parse_mode="HTML")
+                await bot.send_message(call.from_user.id, f"❌ Testingiz bekor qilindi.", parse_mode="HTML",
+                                       reply_markup=test_create_again_markup)
                 return
             else:
                 created_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                testID = await db.create_test_on_db(1, subjectID, created_at)
+                testID = await db.create_test_on_db(call.message.chat.id, subjectID, created_at)
                 questionData['testID'] = testID
 
                 testID_repr = test_id_repr(testID)
@@ -169,37 +187,45 @@ def setup_teacher_handlers(dp):
                     await bot.delete_message(chat_id=call.message.chat.id, message_id=call.message.message_id)
                     await bot.send_message(call.from_user.id,
                                            f"✅ Test va barcha savollar muvaffaqiyatli yaratildi. Testingiz IDsi: <b>{testID_repr}</b>",
-                                           parse_mode='HTML')
+                                           parse_mode='HTML', reply_markup=start_keyboard)
                     correct_answers.clear()
                 elif not testID:
                     await bot.delete_message(chat_id=call.message.chat.id, message_id=call.message.message_id)
+                    chat_id = call.message.chat.id
                     await bot.send_message(call.from_user.id,
-                                           "⏳ Testni yaratishda muammo yuzaga keldi. Tez orada bu muammoni to'g'rilaymiz!")
+                                           f"⏳ Testni yaratishda muammo yuzaga keldi. Tez orada bu muammoni "
+                                           f"to'g'rilaymiz!{chat_id}")
                     correct_answers.clear()
                 elif not are_questions_created:
                     await bot.delete_message(chat_id=call.message.chat.id, message_id=call.message.message_id)
+                    chat_id = call.message.chat.id
                     await bot.send_message(call.from_user.id,
-                                           "⏳ Savollarni yaratishda muammo yuzaga keldi. Tez orada bu muammoni to'g'rilaymiz!")
+                                           f"⏳ Savollarni yaratishda muammo yuzaga keldi. Tez orada bu muammoni "
+                                           f"to'g'rilaymiz!{chat_id}")
                     correct_answers.clear()
         except Exception as e:
             await bot.send_message(LOGS_CHANNEL, f"Error in save_questions() handler: {e}")
-
-    def test_id_repr(testID):
-        # This method converts integer test ID to string representation: 12 -> 000012
-        return "0" * (6 - len(str(testID))) + str(testID)
 
     # TEST MANAGEMENT
     @dp.message_handler(commands=['starttest'])
     async def teacher_start_test(message):
         try:
+            user_id = message.from_user.id
+            is_teacher = await db.validate_teacher(user_id)
+
+            if not is_teacher:
+                await bot.delete_message(chat_id=message.chat.id, message_id=message.message_id)
+                await bot.send_message(message.chat.id,
+                                       "⛔️ Kechirasiz, siz o'qituvchi sifatida ro'yxatdan o'tmagansiz!")
+                return
             # Start the test
             own_tests_markup = types.InlineKeyboardMarkup(row_width=3)
             all_active_tests = await db.get_all_active_tests(message.chat.id)
 
             if all_active_tests:
                 for test in all_active_tests:
-                    print(test[0])
-                    test_repr = test_id_repr(test[0])
+                    # print(test[0])
+                    test_repr = test_id_repr(test.testID)
                     own_tests_markup.add(
                         types.InlineKeyboardButton(text=f"{test_repr}", callback_data=f"active_test:{test_repr}"))
 
@@ -233,13 +259,21 @@ def setup_teacher_handlers(dp):
     @dp.message_handler(commands=['finishtest'])
     async def teacher_finish_test(message):
         try:
+            user_id = message.from_user.id
+            is_teacher = await db.validate_teacher(user_id)
+
+            if not is_teacher:
+                await bot.delete_message(chat_id=message.chat.id, message_id=message.message_id)
+                await bot.send_message(message.chat.id,
+                                       "⛔️ Kechirasiz, siz o'qituvchi sifatida ro'yxatdan o'tmagansiz!")
+                return
             # Finish the test
             own_tests_markup = types.InlineKeyboardMarkup(row_width=3)
             all_ongoing_tests = await db.get_all_ongoing_tests(message.chat.id)
 
             if all_ongoing_tests:
                 for test in all_ongoing_tests:
-                    test_repr = test_id_repr(test[0])
+                    test_repr = test_id_repr(test.testID)
                     own_tests_markup.add(
                         types.InlineKeyboardButton(text=f"{test_repr}", callback_data=f"ongoing_test:{test_repr}"))
 

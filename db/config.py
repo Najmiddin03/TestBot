@@ -6,7 +6,7 @@ from aiogram.contrib.fsm_storage.memory import MemoryStorage
 DB_HOST = "localhost"
 DB_USER = "root"        # Your MySQL username
 DB_PASSWORD = "5656"  # Your MySQL password
-DB_NAME = "test"  # The database you created
+DB_NAME = "test2"  # The database you created
 
 # Replace 'YOUR_BOT_TOKEN' with your actual bot token
 BOT_TOKEN = '6029491691:AAFchAuoZT3OVTy4aSI_6ntVSnI7JxVaGWk'
@@ -53,7 +53,7 @@ student_start_kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyb
 student_start_kb.add(*student_menu)  
 
 test_create_again_markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-test_create_again_markup.add(types.KeyboardButton(button_names['create']))
+test_create_again_markup.add(types.KeyboardButton(button_names["create"]))
 
 solve_again_markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
 solve_again_markup.add(types.KeyboardButton(button_names['solve']))

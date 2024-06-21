@@ -1,7 +1,7 @@
 from aiogram.utils import executor
 
 from db.config import *
-from functions.teacher import setup_teacher_handlers
+from functions import setup_teacher_handlers
 
 setup_teacher_handlers(dp)
 

@@ -1,8 +1,9 @@
+from aiogram.dispatcher.filters.state import State, StatesGroup
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy.orm import declarative_base, relationship
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
+
 from db.config import DB_HOST, DB_USER, DB_PASSWORD, DB_NAME
-from aiogram.dispatcher.filters.state import State, StatesGroup
 
 # Database setup
 DATABASE_URL = f"mysql+aiomysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}"
@@ -43,6 +44,10 @@ class Test(Base):
     ownerID = Column(Integer, ForeignKey('user.id'))
     subjectID = Column(Integer, ForeignKey('subject.subjectID'))
     created_at = Column(DateTime)
+    started_at = Column(DateTime, nullable=True)
+    ended_at = Column(DateTime, nullable=True)
+    is_ongoing = Column(Boolean, default=False)
+    is_active = Column(Boolean, default=True)
     owner = relationship("User")
     subject = relationship("Subject")
 
