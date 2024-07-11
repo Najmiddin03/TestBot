@@ -1,306 +1,132 @@
 from datetime import datetime
 
-from aiogram.dispatcher import FSMContext
-from aiogram.dispatcher.filters.state import State, StatesGroup
-from aiogram.types import Message
+from aiogram import Router, types, F
+from aiogram.filters import Command
+from aiogram.fsm.context import FSMContext
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from db import requests as db
-from db.config import *
-
-subjectID = None
-questionData = {}
-correct_answers = []
+from states.test import TestCreation, TestManage
+from config import *
+from db import requests
 
 
-# Define states
-class Form(StatesGroup):
-    waiting_for_custom_question_count = State()
+router = Router()
 
 
-def setup_teacher_handlers(dp):
-    # Handler for the /create command
-    @dp.message_handler(commands=['create'])
-    async def choose_subject(message: Message):
-        try:
-            user_id = message.from_user.id
-            is_teacher = await db.validate_teacher(user_id)
+@router.message(Command("create"))
+async def create_test(message: types.Message, state: FSMContext):
+    is_teacher = await requests.validate_teacher(message.chat.id)
 
-            if not is_teacher:
-                await bot.delete_message(chat_id=message.chat.id, message_id=message.message_id)
-                await bot.send_message(message.chat.id,
-                                       "⛔️ Kechirasiz, siz o'qituvchi sifatida ro'yxatdan o'tmagansiz!")
-                return
+    if is_teacher == 1:
+        await message.answer("Fanni kiriting, masalan <b>Matematika</b>:", parse_mode="HTML", reply_markup=None)
+        await state.set_state(TestCreation.waiting_for_subject)
+    elif is_teacher == 2:
+        await message.answer("Hurmatli foydalanuvchi, siz o'quvchi sifatida ro'yxatdan o'tgansiz. Siz test yarata olmaysiz!")
+    else:
+        await message.answer("Hurmatli foydalanuvchi, siz botda ro'yxatdan o'tmagansiz. Ro'yxatdan o'tish uchun /register komandasini bosing.")
 
-            is_other_test_ongoing = await db.check_if_other_test_is_ongoing(user_id)
-            if is_other_test_ongoing:
-                await bot.delete_message(chat_id=message.chat.id, message_id=message.message_id)
-                await bot.send_message(message.chat.id,
-                                       f"Kechirasiz, sizning boshqa test(lar)ingiz davom etmoqda. Test davom etayotgan "
-                                       f"paytda yangi test yarata olmaysiz!",
-                                       parse_mode="HTML")
-                return
 
-            # Inline keyboard for subjects
-            subject_markup = types.InlineKeyboardMarkup(row_width=2)
-            subjects = await db.get_subjects()
-            for subject in subjects:
-                subject_markup.add(
-                    types.InlineKeyboardButton(text=subject.name, callback_data="subject:" + subject.name))
-            await bot.send_message(message.chat.id, "📚 Iltimos quyidagi fanlardan birini tanlang:",
-                                   reply_markup=subject_markup)
-        except Exception as e:
-            await bot.send_message(LOGS_CHANNEL, f"Error in choose_subject() handler: {e}")
+@router.message(TestCreation.waiting_for_subject)
+async def get_subject(message: types.Message, state: FSMContext):
+    subject = message.text.lower().capitalize()
+    await state.update_data(subject=subject)
+    await message.answer("Test javoblarini kiriting, masalan <b>AABDC</b>: ", parse_mode="HTML", reply_markup=None)
+    await state.set_state(TestCreation.waiting_for_answers)
 
-    # Callback query handler for subjects
-    @dp.callback_query_handler(lambda query: query.data.startswith('subject:'))
-    async def choose_question_count(callback_query: types.CallbackQuery):
-        try:
-            global subjectID
-            subjectID = await db.get_subject_id(callback_query.data.split(':')[1])
-            # Delete the previous message
-            await bot.delete_message(chat_id=callback_query.message.chat.id,
-                                     message_id=callback_query.message.message_id)
 
-            test_count_inline = types.InlineKeyboardMarkup(row_width=3)
-            btn1 = types.InlineKeyboardButton(text="5", callback_data="test_count:" + "5")
-            btn2 = types.InlineKeyboardButton(text="10", callback_data="test_count:" + "10")
-            btn3 = types.InlineKeyboardButton(text="15", callback_data="test_count:" + "15")
-            btn4 = types.InlineKeyboardButton(text="20", callback_data="test_count:" + "20")
-            btn5 = types.InlineKeyboardButton(text="25", callback_data="test_count:" + "25")
-            btn6 = types.InlineKeyboardButton(text="30", callback_data="test_count:" + "30")
-            btn7 = types.InlineKeyboardButton(text="Boshqa son", callback_data="test_count:" + "other")
+@router.message(TestCreation.waiting_for_answers)
+async def get_answers(message: types.Message, state: FSMContext):
+    answers = message.text.upper()
+    await state.update_data(answers=answers)
+    await message.answer(f"Javoblaringiz: <b>{answers}</b>.", parse_mode="HTML", reply_markup=verify_buttons.as_markup())
+    await state.set_state(TestCreation.waiting_for_verify)
 
-            test_count_inline.row(btn1, btn2, btn3)
-            test_count_inline.row(btn4, btn5, btn6)
-            test_count_inline.row(btn7)
 
-            await bot.send_message(callback_query.message.chat.id, f"❓ Testingiz nechta savoldan iborat?",
-                                   reply_markup=test_count_inline, parse_mode='HTML')
-        except Exception as e:
-            await bot.send_message(LOGS_CHANNEL, f"Error in choose_question_count() handler: {e}")
+@router.callback_query(TestCreation.waiting_for_verify)
+async def get_verification(call: types.CallbackQuery, state: FSMContext):
+    is_verified = 1 if call.data == "verify" else 0
+    await call.message.edit_text(f"✅ Tasdiqlandi." if is_verified else "❌ Bekor qilindi.")
 
-    # Callback query handler for question count
-    @dp.callback_query_handler(lambda query: query.data.startswith('test_count:'))
-    async def ask_question_count(callback_query: types.CallbackQuery):
-        try:
-            if callback_query.data.split(':')[1] == 'other':
-                await Form.waiting_for_custom_question_count.set()
-                # Delete the previous message
-                await bot.delete_message(chat_id=callback_query.message.chat.id,
-                                         message_id=callback_query.message.message_id)
-                await bot.send_message(callback_query.from_user.id,
-                                       "Iltimos test savollari sonini o'zingiz kiriting. Test savollar miqdori 100 "
-                                       "tadan"
-                                       "oshmasligi kerak:")
-            else:
-                questions_amount = int(callback_query.data.split(':')[1])  # Extract question count from callback_data
-                # Delete the previous message
-                await bot.delete_message(chat_id=callback_query.message.chat.id,
-                                         message_id=callback_query.message.message_id)
-                await process_question_creation(callback_query.message, questions_amount, 1)
-        except Exception as e:
-            await bot.send_message(LOGS_CHANNEL, f"Error in ask_question_count() handler: {e}")
+    data = await state.get_data()
+    created_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-    # Handler to receive custom question count
-    @dp.message_handler(state=Form.waiting_for_custom_question_count)
-    async def ask_custom_question_count(message: types.Message, state: FSMContext):
-        try:
-            try:
-                questions_amount = int(message.text)
-                if questions_amount > 100:
-                    await message.reply("Savollar miqdori 100 tadan oshmasligi kerak. Qayta urinib ko'ring.")
-                    return
-                elif questions_amount < 0:
-                    await message.reply(
-                        "Kechirasiz, test savollari soni 0 dan kam bo'lishi mumkin emas. Testni boshidan yarating.")
-                    return
-                await state.finish()
-                await process_question_creation(message, questions_amount, 1)
-            except ValueError:
-                await message.reply("Iltimos, to'g'ri son kiriting.")
-        except Exception as e:
-            await bot.send_message(LOGS_CHANNEL, f"Error in ask_custom_question_count() handler: {e}")
+    if is_verified:
+        is_test_created = await requests.create_test_on_db(call.message.chat.id, data['subject'], created_at, data['answers'])
+        # are_questions_created = await requests.create_questions(testID, data['answers'])
 
-    async def process_question_creation(message, num_questions, current_question):
-        try:
-            variants = types.InlineKeyboardMarkup(row_width=5)
-            v1 = types.InlineKeyboardButton(text='A',
-                                            callback_data=f"teacheranswer_{num_questions}_{current_question}_A")
-            v2 = types.InlineKeyboardButton(text='B',
-                                            callback_data=f"teacheranswer_{num_questions}_{current_question}_B")
-            v3 = types.InlineKeyboardButton(text='C',
-                                            callback_data=f"teacheranswer_{num_questions}_{current_question}_C")
-            v4 = types.InlineKeyboardButton(text='D',
-                                            callback_data=f"teacheranswer_{num_questions}_{current_question}_D")
-            v5 = types.InlineKeyboardButton(text='E',
-                                            callback_data=f"teacheranswer_{num_questions}_{current_question}_E")
-            variants.row(v1, v2, v3, v4, v5)
-            if current_question != 1:
-                await bot.delete_message(chat_id=message.chat.id, message_id=message.message_id)
-            await bot.send_message(message.chat.id, f"👇 <b>{current_question}-savol</b> uchun javobingizni kiriting:",
-                                   reply_markup=variants, parse_mode="HTML")
-        except Exception as e:
-            await bot.send_message(LOGS_CHANNEL, f"Error in process_question_creation() handler: {e}")
+        if is_test_created:
+            testID_repr = test_id_repr(is_test_created)
+            await call.message.answer(f"""Test IDsi: <b>{testID_repr}</b>.
+                                      
+Testni boshlash uchun /starttest komandasini bosing.""", parse_mode="HTML")
+            state.clear()
+        else:
+            await call.message.answer(f"Test yaratish jarayonida muammo yuzaga keldi.")
+            state.clear()
+    else:
+        await call.message.answer("Yangi test yaratish uchun /create komandasini bosing.")
+        state.clear()
 
-    @dp.callback_query_handler(lambda query: query.data.startswith('teacheranswer_'))
-    async def process_answer(call):
-        try:
-            data = call.data.split('_')
-            total_questions = int(data[1])
-            current_question = int(data[2])
-            correct_answers.append(data[3])
 
-            if current_question < total_questions:
-                await process_question_creation(call.message, total_questions, current_question + 1)
-            else:
-                validate_correct_answers_markup = types.InlineKeyboardMarkup(row_width=2)
-                btn1 = types.InlineKeyboardButton(text="❌Bekor qilish", callback_data="validate_answer:cancel")
-                btn2 = types.InlineKeyboardButton(text="✅Tasdiqlash", callback_data="validate_answer:verify")
-                validate_correct_answers_markup.row(btn1, btn2)
-                answers_str = "".join(correct_answers)
-                await bot.delete_message(chat_id=call.message.chat.id, message_id=call.message.message_id)
-                await bot.send_message(call.message.chat.id,
-                                       f"""Siz kiritgan javoblar: <b>{answers_str}</b>Tasdiqlaysizmi?""",
-                                       parse_mode="HTML", reply_markup=validate_correct_answers_markup)
-        except Exception as e:
-            await bot.send_message(LOGS_CHANNEL, f"Error in process_answer() handler: {e}")
+@router.message(Command("starttest"))
+async def start_test(message: types.Message, state: FSMContext):
+    all_active_tests = await requests.get_all_active_tests(message.chat.id)
+    own_tests_markup = InlineKeyboardBuilder()
 
-    @dp.callback_query_handler(lambda query: query.data.startswith('validate_answer:'))
-    async def save_questions(call):
-        try:
-            validate_message = call.data.split(":")[1]
-            if validate_message == "cancel":
-                correct_answers.clear()
-                await bot.delete_message(chat_id=call.message.chat.id, message_id=call.message.message_id)
-                await bot.send_message(call.from_user.id, f"❌ Testingiz bekor qilindi.", parse_mode="HTML",
-                                       reply_markup=test_create_again_markup)
-                return
-            else:
-                created_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                testID = await db.create_test_on_db(call.message.chat.id, subjectID, created_at)
-                questionData['testID'] = testID
+    if all_active_tests:
+        for test in all_active_tests:
+            print(test)
+            test_repr = test_id_repr(test)
+            own_tests_markup.add(types.InlineKeyboardButton(text=test_repr, callback_data=f"active_test:{test}"))
+        own_tests_markup.adjust(2)
 
-                testID_repr = test_id_repr(testID)
-                are_questions_created = await db.create_questions(testID, correct_answers)
+        await message.answer("Qaysi testni boshlamoqchisiz?", reply_markup=own_tests_markup.as_markup())
+        await state.set_state(TestManage.waiting_for_test_id_to_start)
+    else:
+        await message.answer("Kechirasiz, siz hali test yaratmagansiz, yoki barcha testlaringiz tugatilgan.")
 
-                if testID and are_questions_created:
-                    await bot.delete_message(chat_id=call.message.chat.id, message_id=call.message.message_id)
-                    await bot.send_message(call.from_user.id,
-                                           f"✅ Test va barcha savollar muvaffaqiyatli yaratildi. Testingiz IDsi: <b>{testID_repr}</b>",
-                                           parse_mode='HTML', reply_markup=start_keyboard)
-                    correct_answers.clear()
-                elif not testID:
-                    await bot.delete_message(chat_id=call.message.chat.id, message_id=call.message.message_id)
-                    chat_id = call.message.chat.id
-                    await bot.send_message(call.from_user.id,
-                                           f"⏳ Testni yaratishda muammo yuzaga keldi. Tez orada bu muammoni "
-                                           f"to'g'rilaymiz!{chat_id}")
-                    correct_answers.clear()
-                elif not are_questions_created:
-                    await bot.delete_message(chat_id=call.message.chat.id, message_id=call.message.message_id)
-                    chat_id = call.message.chat.id
-                    await bot.send_message(call.from_user.id,
-                                           f"⏳ Savollarni yaratishda muammo yuzaga keldi. Tez orada bu muammoni "
-                                           f"to'g'rilaymiz!{chat_id}")
-                    correct_answers.clear()
-        except Exception as e:
-            await bot.send_message(LOGS_CHANNEL, f"Error in save_questions() handler: {e}")
 
-    # TEST MANAGEMENT
-    @dp.message_handler(commands=['starttest'])
-    async def teacher_start_test(message):
-        try:
-            user_id = message.from_user.id
-            is_teacher = await db.validate_teacher(user_id)
+@router.callback_query(TestManage.waiting_for_test_id_to_start)
+async def get_start_test(call: types.CallbackQuery, state: FSMContext):
+    test = call.data.split(":")[1]
+    test_repr = test_id_repr(test)
 
-            if not is_teacher:
-                await bot.delete_message(chat_id=message.chat.id, message_id=message.message_id)
-                await bot.send_message(message.chat.id,
-                                       "⛔️ Kechirasiz, siz o'qituvchi sifatida ro'yxatdan o'tmagansiz!")
-                return
-            # Start the test
-            own_tests_markup = types.InlineKeyboardMarkup(row_width=3)
-            all_active_tests = await db.get_all_active_tests(message.chat.id)
+    is_started = await requests.start_test(test)
 
-            if all_active_tests:
-                for test in all_active_tests:
-                    # print(test[0])
-                    test_repr = test_id_repr(test.testID)
-                    own_tests_markup.add(
-                        types.InlineKeyboardButton(text=f"{test_repr}", callback_data=f"active_test:{test_repr}"))
+    if is_started:
+        await call.message.edit_text(f"{test_repr}-test boshlandi.")
+    else:
+        await call.message.edit_text("Testni boshlashda muammo yuzaga keldi.")
 
-                await bot.delete_message(chat_id=message.chat.id, message_id=message.message_id)
-                await bot.send_message(message.chat.id, "Qaysi testni boshlamoqchisiz?", reply_markup=own_tests_markup)
-            else:
-                await bot.delete_message(chat_id=message.chat.id, message_id=message.message_id)
-                await bot.send_message(message.chat.id,
-                                       "Kechirasiz, siz hali test yaratmagansiz yoki barcha testlaringiz oldin o'tib ketgan. Ularni qayta boshlay olmaysiz.",
-                                       reply_markup=own_tests_markup)
-        except Exception as e:
-            await bot.send_message(LOGS_CHANNEL, f"Error in teacher_start_test() handler: {e}")
 
-    @dp.callback_query_handler(lambda query: query.data.startswith('active_test:'))
-    async def process_start_test(call):
-        try:
-            start_testID = int(call.data.split(":")[1])
-            start_testID_repr = test_id_repr(start_testID)
-            is_started = await db.start_test(start_testID)
+@router.message(Command("finishtest"))
+async def finish_test(message: types.Message, state: FSMContext):
+    own_tests_markup = InlineKeyboardBuilder()
+    all_ongoing_tests = await requests.get_all_ongoing_tests(message.chat.id)
 
-            if is_started:
-                await bot.delete_message(chat_id=call.message.chat.id, message_id=call.message.message_id)
-                await bot.send_message(call.message.chat.id, f"{start_testID_repr}-test boshlandi!", parse_mode="HTML")
-            else:
-                await bot.delete_message(chat_id=call.message.chat.id, message_id=call.message.message_id)
-                await bot.send_message(call.message.chat.id,
-                                       "Kechirasiz, testni boshlashda muammo yuzaga keldi. Iltimos admin bilan aloqaga chiqing: @cacnos_jangchisi")
-        except Exception as e:
-            await bot.send_message(LOGS_CHANNEL, f"Error in process_start_test() handler: {e}")
+    if all_ongoing_tests:
+        for test in all_ongoing_tests:
+            test_repr = test_id_repr(test)
+            own_tests_markup.add(types.InlineKeyboardButton(text=test_repr, callback_data=f"ongoing_test:{test}"))
+        own_tests_markup.adjust(2)
 
-    @dp.message_handler(commands=['finishtest'])
-    async def teacher_finish_test(message):
-        try:
-            user_id = message.from_user.id
-            is_teacher = await db.validate_teacher(user_id)
+        await message.answer("Qaysi testni tugatmoqchisiz?", reply_markup=own_tests_markup.as_markup())
+        await state.set_state(TestManage.waiting_for_test_id_to_finish)
+    else:
+        await message.answer("Kechirasiz, hozir sizda davom etayotgan test mavjud emas.")
 
-            if not is_teacher:
-                await bot.delete_message(chat_id=message.chat.id, message_id=message.message_id)
-                await bot.send_message(message.chat.id,
-                                       "⛔️ Kechirasiz, siz o'qituvchi sifatida ro'yxatdan o'tmagansiz!")
-                return
-            # Finish the test
-            own_tests_markup = types.InlineKeyboardMarkup(row_width=3)
-            all_ongoing_tests = await db.get_all_ongoing_tests(message.chat.id)
 
-            if all_ongoing_tests:
-                for test in all_ongoing_tests:
-                    test_repr = test_id_repr(test.testID)
-                    own_tests_markup.add(
-                        types.InlineKeyboardButton(text=f"{test_repr}", callback_data=f"ongoing_test:{test_repr}"))
+@router.callback_query(TestManage.waiting_for_test_id_to_finish)
+async def get_finish_test(call: types.CallbackQuery, state: FSMContext):
+    test = call.data.split(":")[1]
+    test_repr = test_id_repr(test)
 
-                await bot.delete_message(chat_id=message.chat.id, message_id=message.message_id)
-                await bot.send_message(message.chat.id, "Qaysi testni tugatmoqchisiz?", reply_markup=own_tests_markup)
-            else:
-                await bot.delete_message(chat_id=message.chat.id, message_id=message.message_id)
-                await bot.send_message(message.chat.id,
-                                       "Kechirasiz, hozirda sizning davom etib turgan testingiz mavjud emas.",
-                                       reply_markup=own_tests_markup)
-        except Exception as e:
-            await bot.send_message(LOGS_CHANNEL, f"Error in teacher_finish_test() handler: {e}")
+    is_finished = await requests.finish_test(test)
 
-    @dp.callback_query_handler(lambda query: query.data.startswith('ongoing_test:'))
-    async def process_finish_test(call):
-        try:
-            finish_testID = int(call.data.split(":")[1])
-            finish_testID_repr = test_id_repr(finish_testID)
-            is_finished = await db.finish_test(finish_testID)
+    if is_finished:
+        await call.message.edit_text(f"{test_repr}-test yakunlandi.")
 
-            if is_finished:
-                await bot.delete_message(chat_id=call.message.chat.id, message_id=call.message.message_id)
-                await bot.send_message(call.message.chat.id, f"{finish_testID_repr}-test yakunlandi!",
-                                       parse_mode="HTML")
-            else:
-                await bot.delete_message(chat_id=call.message.chat.id, message_id=call.message.message_id)
-                await bot.send_message(call.message.chat.id,
-                                       "Kechirasiz, testni tugatishda muammo yuzaga keldi. Iltimos admin bilan aloqaga chiqing: @cacnos_jangchisi")
-        except Exception as e:
-            await bot.send_message(LOGS_CHANNEL, f"Error in process_finish_test() handler: {e}")
+        await requests.generate_test_report(call.message, test)
+        await state.clear()
+    else:
+        await call.message.edit_text("Testni tugatishda muammo yuzaga keldi.")

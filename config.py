@@ -1,27 +1,25 @@
 import os
 
-from aiogram import Bot, Dispatcher, types
-from aiogram.contrib.fsm_storage.memory import MemoryStorage
+from aiogram import types
+from aiogram.utils.keyboard import ReplyKeyboardBuilder,InlineKeyboardBuilder
+from dotenv import load_dotenv
+from aiogram import Bot
 
-DB_HOST = "localhost"
-DB_USER = "root"        # Your MySQL username
-DB_PASSWORD = "5656"  # Your MySQL password
-DB_NAME = "test2"  # The database you created
+load_dotenv()
 
-# Replace 'YOUR_BOT_TOKEN' with your actual bot token
-BOT_TOKEN = '6029491691:AAFchAuoZT3OVTy4aSI_6ntVSnI7JxVaGWk'
+DB_HOST = os.getenv("DB_HOST")
+DB_USER = os.getenv("DB_USER")
+DB_PASSWORD = os.getenv("DB_PASSWORD")
+DB_NAME = os.getenv("DB_NAME")
 
-# Initialize bot and dispatcher
-bot = Bot(token=BOT_TOKEN)
-storage = MemoryStorage()
-dp = Dispatcher(bot, storage=storage)
-
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 LOGS_CHANNEL = os.getenv("LOGS_CHANNEL")
+
 
 roles = ["O'qituvchi", "O'quvchi"]
 regions = {
     "Toshkent shahri": ["Olmazor tumani", "Shayxontohur tumani", "Uchtepa tumani", "Chilonzor tumani", "Yunusobod tumani", "Mirobod tumani", "Yashnobod tumani", "Yakkasaroy tumani", "Sergeli tumani", "Bektemir tumani", "Yangihayot tumani", "Mirzo Ulug'bek tumani"],
-    "Toshkent viloyati": ["Bekobod tumani", "Bo'ka tumani", "Bo'stonliq tumani", "Chinoz tumani", "Ohangaron tumani", "Oqqo'rg'on tumani", "O'rta Chirchiq tumani", "Parkent tumani", "Piskent tumani", "Qibray tumani", "Quyi Chirchiq tumani", "Toshkent tumani", "Yangiyo'l tumani", "Yuqori Chirchiq tumani", "Zangiota tumani"],
+    "Toshkent viloyati": ["Bekobod shahri","Bekobod tumani", "Bo'ka tumani", "Bo'stonliq tumani", "Chinoz tumani", "Ohangaron tumani", "Oqqo'rg'on tumani", "O'rta Chirchiq tumani", "Parkent tumani", "Piskent tumani", "Qibray tumani", "Quyi Chirchiq tumani", "Toshkent tumani", "Yangiyo'l tumani", "Yuqori Chirchiq tumani", "Zangiota tumani"],
     "Andijon viloyati": ["Ulug'nor tumani", "Baliqchi tumani", "Bo'ston tumani", "Shahrixon tumani", "Oltinko'l tumani", "Asaka tumani", "Marhamat tumani", "Buloqboshi tumani", "Andijon tumani", "Xo'jaobod tumani", "Jalaquduq tumani", "Qo'rg'ontepa tumani", "Xonobod tumani", "Andijon shahri"],
     "Namangan viloyati": ["Namangan tumani", "Mingbuloq tumani", "Kosonsoy tumani", "Pop tumani", "To'raqo'rg'on tumani", "Uychi tumani", "Chortoq tumani", "Yangiqo'rg'on tumani", "Norin tumani", "Uchqo'rg'on tumani", "Chust tumani", "Namangan shahri tumani", "Namangan shahri"],
     "Farg'ona viloyati": ["Oltiariq tumani", "Bag'dod tumani", "Beshariq tumani", "Buvayda tumani", "Dang'ara tumani", "Farg'ona tumani", "Furqat tumani", "Qo'shtepa tumani", "Quva tumani", "Rishton tumani", "So'x tumani", "Toshloq tumani", "Uchko'prik tumani", "O'zbekiston tumani", "Yozyovon tumani", "Farg'ona shahri"],
@@ -38,27 +36,43 @@ regions = {
 
 
 button_names = {
+    "register": "✏️ Ro'yxatdan o'tish",
     "myinfo": "👤 Mening ma'lumotlarim",
     "help": "🆘 Yordam",
     "create": "📝 Test yaratish",
-    "solve": "/solve"
+    "solve": "📝 Test yechish"
 }
 
-# Buttons
-menu_buttons = [types.KeyboardButton(button_names["myinfo"]), types.KeyboardButton(button_names["help"]), types.KeyboardButton(button_names["create"])]
-student_menu = [types.KeyboardButton(button_names["myinfo"]), types.KeyboardButton(button_names["help"]), types.KeyboardButton(button_names["solve"])]
-start_keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-start_keyboard.add(*menu_buttons)  
-student_start_kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-student_start_kb.add(*student_menu)  
 
-test_create_again_markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-test_create_again_markup.add(types.KeyboardButton(button_names["create"]))
+"""Main menu buttons for new users (not registered)"""
+intro_buttons = ReplyKeyboardBuilder()
+intro_buttons.add(types.KeyboardButton(text=button_names["register"]), types.KeyboardButton(text=button_names["help"]))
+intro_buttons.adjust(2)
 
-solve_again_markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-solve_again_markup.add(types.KeyboardButton(button_names['solve']))
 
+"""Main Menu buttons for registered teachers"""
+menu_buttons = ReplyKeyboardBuilder()
+menu_buttons.add(*[types.KeyboardButton(text=txt) for txt in list(button_names.values())[1:3]])
+menu_buttons.adjust(3)
+
+
+"""Main Menu buttons for registered students"""
+student_buttons = ReplyKeyboardBuilder()
+student_buttons.add(types.KeyboardButton(text=button_names["myinfo"]), types.KeyboardButton(text=button_names['help']), types.KeyboardButton(text=button_names['solve']))
+student_buttons.adjust(3)
+
+
+"""Validation"""
+verify_buttons = InlineKeyboardBuilder()
+verify_buttons.add(types.InlineKeyboardButton(text="✅ Tasdiqlayman", callback_data="verify"), types.InlineKeyboardButton(text="❌ Bekor qilaman", callback_data="cancel"))
+verify_buttons.adjust(2)
+
+
+bot = Bot(token=BOT_TOKEN)
 
 def test_id_repr(testID):
     # This method converts integer test ID to string representation: 12 -> 000012
     return "0"*(6-len(str(testID)))+str(testID)
+
+prod_dir = ""
+# prod_dir = "/home/tuya/test-bot-prod/test-bot/"
